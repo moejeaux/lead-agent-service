@@ -12,20 +12,35 @@ app.get("/health", (_req, res) => {
 });
 
 app.post("/enrich-lead", (req, res) => {
-  const lead = req.body;
+  const {
+    firstName = "",
+    lastName = "",
+    email = "",
+    company = "",
+    website = "",
+    jobTitle = "",
+    source = ""
+  } = req.body;
 
   // minimal stub – later we'll call real enrichment APIs
-  const scored = {
-    ...lead,
+  const enriched = {
+    email,
+    firstName,
+    lastName,
+    company,
+    website,
+    jobTitle,
+    source,
     enrichment: {
-      companySize: "unknown",
-      industry: "unknown"
+      companySize: "",
+      industry: "",
+      country: ""
     },
     score: 50,
     tier: "B"
   };
 
-  res.json(scored);
+  res.json(enriched);
 });
 
 app.listen(port, () => {

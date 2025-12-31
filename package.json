@@ -4,7 +4,7 @@
   "main": "dist/api/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/api/index.ts",
-    "build": "npx tsc",
+    "build": "node ./node_modules/typescript/bin/tsc",
     "start": "node dist/api/index.js"
   },
   "dependencies": {

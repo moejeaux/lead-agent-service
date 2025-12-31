@@ -1,0 +1,80 @@
+openapi: 3.0.3
+info:
+  title: Lead Agent Service
+  version: 1.0.0
+servers:
+  - url: https://lead-agent-service-production.up.railway.app
+paths:
+  /enrich-lead:
+    post:
+      summary: Enrich and score a lead
+      operationId: enrichLead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrichLeadRequest'
+      responses:
+        '200':
+          description: Enriched and scored lead
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrichLeadResponse'
+components:
+  schemas:
+    EnrichLeadRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        company:
+          type: string
+        website:
+          type: string
+        jobTitle:
+          type: string
+        source:
+          type: string
+      required: [email]
+    EnrichLeadResponse:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        company:
+          type: string
+        website:
+          type: string
+        jobTitle:
+          type: string
+        source:
+          type: string
+        enrichment:
+          $ref: '#/components/schemas/LeadEnrichment'
+        score:
+          type: integer
+        tier:
+          type: string
+      required: [email, score, tier, enrichment]
+    LeadEnrichment:
+      type: object
+      properties:
+        companySize:
+          type: string
+        industry:
+          type: string
+        country:
+          type: string
+

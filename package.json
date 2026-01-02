@@ -1,11 +1,11 @@
 {
-  "name": "lead-agent-service",
+  "name": "lead-agent-service-monorepo",
   "version": "1.0.0",
-  "main": "dist/api/index.js",
+  "private": true,
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/api/index.ts",
-    "build": "node ./node_modules/typescript/bin/tsc",
-    "start": "node dist/api/index.js"
+    "dev": "ts-node-dev --respawn --transpile-only apps/lead-agent-service/src/server.ts",
+    "build": "node ./node_modules/typescript/bin/tsc -p apps/lead-agent-service/tsconfig.json",
+    "start": "node apps/lead-agent-service/dist/server.js"
   },
   "dependencies": {
     "express": "^4.19.0",

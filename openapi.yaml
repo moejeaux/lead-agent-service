@@ -1,13 +1,14 @@
 openapi: 3.0.3
 info:
   title: Lead Agent Service
-  version: 1.0.0
+  version: 2.0.0
+  description: Lead enrichment and scoring service for Salesforce External Service / Flow
 servers:
   - url: https://lead-agent-service-production.up.railway.app
 paths:
   /enrich-lead:
     post:
-      summary: Enrich and score a lead
+      summary: Enrich and score a Salesforce Lead
       operationId: enrichLead
       requestBody:
         required: true
@@ -22,59 +23,112 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnrichLeadResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /health:
+    get:
+      summary: Health check endpoint
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
 components:
   schemas:
     EnrichLeadRequest:
       type: object
+      description: Salesforce Lead object fields
       properties:
-        firstName:
+        FirstName:
           type: string
-        lastName:
+          description: Lead's first name
+        LastName:
           type: string
-        email:
+          description: Lead's last name
+        Company:
+          type: string
+          description: Company name
+        Email:
           type: string
           format: email
-        company:
+          description: Lead's email address
+        Phone:
           type: string
-        website:
+          description: Lead's phone number
+        Title:
           type: string
-        jobTitle:
+          description: Job title
+        Industry:
           type: string
-        source:
+          description: Company industry
+        NumberOfEmployees:
+          type: integer
+          description: Number of employees at the company
+        AnnualRevenue:
+          type: number
+          description: Company annual revenue
+        LeadSource:
           type: string
-      required: [email]
+          description: How the lead was acquired
+      required:
+        - LastName
+        - Company
     EnrichLeadResponse:
       type: object
       properties:
-        email:
-          type: string
-          format: email
-        firstName:
-          type: string
-        lastName:
-          type: string
-        company:
-          type: string
-        website:
-          type: string
-        jobTitle:
-          type: string
-        source:
-          type: string
-        enrichment:
-          $ref: '#/components/schemas/LeadEnrichment'
         score:
           type: integer
+          description: Lead score (0-100+)
+          example: 65
         tier:
           type: string
-      required: [email, score, tier, enrichment]
-    LeadEnrichment:
+          enum: [low, medium, high]
+          description: Lead tier based on score
+          example: medium
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Array of scoring reasons
+          example: ["Corporate email domain", "VP or director level", "High-value industry: Technology"]
+        estimatedArr:
+          type: number
+          description: Estimated annual recurring revenue
+          example: 25000
+        decisionId:
+          type: string
+          format: uuid
+          description: Unique identifier for this scoring decision
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      required:
+        - score
+        - tier
+        - reasons
+        - estimatedArr
+        - decisionId
+    ErrorResponse:
       type: object
       properties:
-        companySize:
+        error:
           type: string
-        industry:
-          type: string
-        country:
-          type: string
-
+          description: Error message

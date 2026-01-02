@@ -1,8 +1,8 @@
 import { EnrichLeadRequest, EnrichLeadResponse } from "../types/salesforce";
 
 /**
- * Pure function that scores a lead based on heuristic rules
- * Returns score, tier, reasons, and estimated ARR
+ * Pure function that scores a lead based on deterministic heuristic rules
+ * Each rule pushes a human-readable reason with the actual value and points awarded
  */
 export function scoreLead(input: EnrichLeadRequest): Omit<EnrichLeadResponse, "decisionId"> {
   let score = 0;
@@ -18,59 +18,60 @@ export function scoreLead(input: EnrichLeadRequest): Omit<EnrichLeadResponse, "d
     const emailDomain = input.Email.split("@")[1]?.toLowerCase() || "";
     if (emailDomain && !freeDomains.includes(emailDomain)) {
       score += 15;
-      reasons.push("Corporate email domain");
+      reasons.push(`Corporate domain: ${emailDomain} (+15)`);
     } else if (emailDomain) {
-      reasons.push("Free email provider");
+      reasons.push(`Free email provider: ${emailDomain} (+0)`);
     }
   }
 
   // --- Company size scoring ---
-  if (input.NumberOfEmployees) {
+  if (input.NumberOfEmployees !== undefined && input.NumberOfEmployees !== null) {
     if (input.NumberOfEmployees >= 1000) {
       score += 25;
-      reasons.push("Enterprise company (1000+ employees)");
+      reasons.push(`Company size: ${input.NumberOfEmployees.toLocaleString()} employees (+25)`);
     } else if (input.NumberOfEmployees >= 200) {
       score += 20;
-      reasons.push("Mid-market company (200-999 employees)");
+      reasons.push(`Company size: ${input.NumberOfEmployees.toLocaleString()} employees (+20)`);
     } else if (input.NumberOfEmployees >= 50) {
       score += 10;
-      reasons.push("Growing company (50-199 employees)");
+      reasons.push(`Company size: ${input.NumberOfEmployees.toLocaleString()} employees (+10)`);
     } else {
       score += 5;
-      reasons.push("Small company (<50 employees)");
+      reasons.push(`Company size: ${input.NumberOfEmployees.toLocaleString()} employees (+5)`);
     }
   }
 
   // --- Annual revenue scoring ---
-  if (input.AnnualRevenue) {
+  if (input.AnnualRevenue !== undefined && input.AnnualRevenue !== null) {
+    const revenueFormatted = `$${(input.AnnualRevenue / 1_000_000).toFixed(1)}M`;
     if (input.AnnualRevenue >= 100_000_000) {
       score += 25;
-      reasons.push("High revenue ($100M+)");
+      reasons.push(`Annual revenue: ${revenueFormatted} (+25)`);
     } else if (input.AnnualRevenue >= 10_000_000) {
       score += 15;
-      reasons.push("Strong revenue ($10M-$100M)");
+      reasons.push(`Annual revenue: ${revenueFormatted} (+15)`);
     } else if (input.AnnualRevenue >= 1_000_000) {
       score += 10;
-      reasons.push("Established revenue ($1M-$10M)");
+      reasons.push(`Annual revenue: ${revenueFormatted} (+10)`);
     }
   }
 
   // --- Job title seniority ---
   if (input.Title) {
-    const title = input.Title.toLowerCase();
+    const titleLower = input.Title.toLowerCase();
     const cSuiteKeywords = ["ceo", "cto", "cfo", "coo", "cmo", "chief", "founder", "owner", "president"];
     const vpKeywords = ["vp", "vice president", "head of", "director"];
     const managerKeywords = ["manager", "lead", "senior"];
 
-    if (cSuiteKeywords.some(k => title.includes(k))) {
+    if (cSuiteKeywords.some(k => titleLower.includes(k))) {
       score += 30;
-      reasons.push("C-suite or founder");
-    } else if (vpKeywords.some(k => title.includes(k))) {
+      reasons.push(`Title: ${input.Title} (+30)`);
+    } else if (vpKeywords.some(k => titleLower.includes(k))) {
       score += 20;
-      reasons.push("VP or director level");
-    } else if (managerKeywords.some(k => title.includes(k))) {
+      reasons.push(`Title: ${input.Title} (+20)`);
+    } else if (managerKeywords.some(k => titleLower.includes(k))) {
       score += 10;
-      reasons.push("Manager level");
+      reasons.push(`Title: ${input.Title} (+10)`);
     }
   }
 
@@ -79,37 +80,38 @@ export function scoreLead(input: EnrichLeadRequest): Omit<EnrichLeadResponse, "d
   const mediumValueIndustries = ["manufacturing", "retail", "consulting", "professional services"];
 
   if (input.Industry) {
-    const industry = input.Industry.toLowerCase();
-    if (highValueIndustries.some(i => industry.includes(i))) {
+    const industryLower = input.Industry.toLowerCase();
+    if (highValueIndustries.some(i => industryLower.includes(i))) {
       score += 15;
-      reasons.push(`High-value industry: ${input.Industry}`);
-    } else if (mediumValueIndustries.some(i => industry.includes(i))) {
+      reasons.push(`Industry: ${input.Industry} (+15)`);
+    } else if (mediumValueIndustries.some(i => industryLower.includes(i))) {
       score += 8;
-      reasons.push(`Target industry: ${input.Industry}`);
+      reasons.push(`Industry: ${input.Industry} (+8)`);
     }
   }
 
   // --- Lead source quality ---
   if (input.LeadSource) {
-    const source = input.LeadSource.toLowerCase();
+    const sourceLower = input.LeadSource.toLowerCase();
     const highQualitySources = ["referral", "partner", "event", "conference", "demo request"];
     const mediumQualitySources = ["website", "webinar", "content download"];
 
-    if (highQualitySources.some(s => source.includes(s))) {
+    if (highQualitySources.some(s => sourceLower.includes(s))) {
       score += 15;
-      reasons.push(`High-intent source: ${input.LeadSource}`);
-    } else if (mediumQualitySources.some(s => source.includes(s))) {
+      reasons.push(`Lead source: ${input.LeadSource} (+15)`);
+    } else if (mediumQualitySources.some(s => sourceLower.includes(s))) {
       score += 8;
-      reasons.push(`Engaged source: ${input.LeadSource}`);
+      reasons.push(`Lead source: ${input.LeadSource} (+8)`);
     }
   }
 
   // --- Company name present ---
   if (input.Company && input.Company.trim().length > 2) {
     score += 5;
+    reasons.push(`Company provided: ${input.Company} (+5)`);
   }
 
-  // --- Tier calculation ---
+  // --- Tier calculation: high >= 70, medium >= 40, else low ---
   let tier: "low" | "medium" | "high" = "low";
   if (score >= 70) {
     tier = "high";
@@ -118,9 +120,8 @@ export function scoreLead(input: EnrichLeadRequest): Omit<EnrichLeadResponse, "d
   }
 
   // --- Estimated ARR calculation ---
-  // Simple heuristic: base amount adjusted by company size and score
   let estimatedArr = 0;
-  if (input.NumberOfEmployees) {
+  if (input.NumberOfEmployees !== undefined && input.NumberOfEmployees !== null) {
     if (input.NumberOfEmployees >= 1000) {
       estimatedArr = 50000;
     } else if (input.NumberOfEmployees >= 200) {
@@ -147,4 +148,3 @@ export function scoreLead(input: EnrichLeadRequest): Omit<EnrichLeadResponse, "d
     estimatedArr
   };
 }
-

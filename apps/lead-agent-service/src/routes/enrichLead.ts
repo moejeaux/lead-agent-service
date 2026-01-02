@@ -12,13 +12,8 @@ const router = Router();
  */
 router.post("/", async (req: Request, res: Response) => {
   try {
+    // Parse request body as EnrichLeadRequest
     const input = req.body as EnrichLeadRequest;
-
-    // Log incoming request
-    console.log(`[enrich-lead] Incoming request:`);
-    console.log(`[enrich-lead]   Email: ${input.Email || "N/A"}`);
-    console.log(`[enrich-lead]   Company: ${input.Company}`);
-    console.log(`[enrich-lead]   Name: ${input.FirstName || ""} ${input.LastName}`);
 
     // Validate required fields
     if (!input.LastName || !input.Company) {
@@ -28,10 +23,10 @@ router.post("/", async (req: Request, res: Response) => {
       });
     }
 
-    // Score the lead
+    // Call scoreLead to get scoring result
     const scoreResult = scoreLead(input);
 
-    // Generate decision ID
+    // Generate decision ID (UUID)
     const decisionId = randomUUID();
 
     // Build response
@@ -40,14 +35,16 @@ router.post("/", async (req: Request, res: Response) => {
       decisionId
     };
 
-    // Log computed results
-    console.log(`[enrich-lead] Computed score: ${response.score}`);
-    console.log(`[enrich-lead] Tier: ${response.tier}`);
-    console.log(`[enrich-lead] Reasons: ${response.reasons.join(", ")}`);
-    console.log(`[enrich-lead] Estimated ARR: $${response.estimatedArr}`);
-    console.log(`[enrich-lead] Decision ID: ${decisionId}`);
+    // Log { email, company, score, tier, decisionId } to console
+    console.log(`[enrich-lead] Decision:`, {
+      email: input.Email || null,
+      company: input.Company,
+      score: response.score,
+      tier: response.tier,
+      decisionId
+    });
 
-    // Persist decision log
+    // Persist decision via decisionLog.insert
     const decision: LeadDecision = {
       decisionId,
       email: input.Email || null,
@@ -64,15 +61,14 @@ router.post("/", async (req: Request, res: Response) => {
 
     await decisionLog.insert(decision);
 
-    // Return response
+    // Return JSON EnrichLeadResponse with decisionId
     return res.status(200).json(response);
 
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[enrich-lead] Error processing request:`, message);
+    console.error(`[enrich-lead] Error:`, message);
     return res.status(500).json({ error: message });
   }
 });
 
 export default router;
-

@@ -1,43 +1,230 @@
 openapi: 3.0.3
 info:
   title: Lead Agent Service
-  version: 2.0.0
-  description: Lead enrichment and scoring service for Salesforce External Service / Flow
+  version: 3.0.0
+  description: |
+    Universal lead enrichment and scoring service.
+    
+    Accepts leads from any CRM (Salesforce, HubSpot, Pipedrive) or direct API calls,
+    normalizes them to a universal schema, enriches with external data, and returns
+    a score with detailed breakdown.
+    
+    ## Authentication
+    
+    Pass your tenant API key via one of:
+    - `X-API-Key` header (recommended)
+    - `Authorization: Bearer <key>` header
+    - `?api_key=<key>` query parameter
+    
+    ## CRM Auto-Detection
+    
+    The API automatically detects the source CRM based on field naming conventions:
+    - **Salesforce**: PascalCase fields (`FirstName`, `Company`, `NumberOfEmployees`)
+    - **HubSpot**: lowercase fields (`firstname`, `company`, `numberofemployees`)
+    - **Pipedrive**: snake_case with arrays (`first_name`, `org_name`, `email[]`)
+    
+    You can also hint the source via `X-Source` header or `_source` field in the body.
+    
+  contact:
+    name: API Support
+  license:
+    name: MIT
+
 servers:
   - url: https://lead-agent-service-production.up.railway.app
+    description: Production
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Leads
+    description: Lead enrichment and scoring
+  - name: Health
+    description: Service health checks
+
 paths:
   /enrich-lead:
     post:
-      summary: Enrich and score a Salesforce Lead
+      tags:
+        - Leads
+      summary: Enrich and score a lead
+      description: |
+        Accepts a lead from any CRM or direct API call, maps it to the universal schema,
+        enriches it with external data, scores it, and persists the result.
+        
+        The endpoint auto-detects the CRM source and maps fields accordingly.
       operationId: enrichLead
+      parameters:
+        - name: X-API-Key
+          in: header
+          description: Tenant API key for authentication
+          required: false
+          schema:
+            type: string
+          example: "sk_live_abc123..."
+        - name: X-Source
+          in: header
+          description: Hint for CRM source (optional, auto-detected if not provided)
+          required: false
+          schema:
+            type: string
+            enum: [salesforce, hubspot, pipedrive, api]
+          example: salesforce
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/EnrichLeadRequest'
+            examples:
+              salesforce:
+                summary: Salesforce Lead
+                description: Standard Salesforce Lead object fields (PascalCase)
+                value:
+                  Id: "00Q5e000001abc123"
+                  FirstName: "Jane"
+                  LastName: "Smith"
+                  Company: "Acme Corp"
+                  Email: "jane.smith@acme.com"
+                  Title: "VP of Sales"
+                  Industry: "Technology"
+                  NumberOfEmployees: 500
+                  AnnualRevenue: 50000000
+                  LeadSource: "Demo Request"
+                  Country: "United States"
+                  State: "California"
+              hubspot:
+                summary: HubSpot Contact
+                description: HubSpot contact properties (lowercase)
+                value:
+                  vid: 12345
+                  firstname: "John"
+                  lastname: "Doe"
+                  email: "john.doe@techstartup.io"
+                  jobtitle: "CTO"
+                  company: "TechStartup"
+                  industry: "SaaS"
+                  numberofemployees: "75"
+                  annualrevenue: "5000000"
+                  lifecyclestage: "opportunity"
+                  country: "Germany"
+              pipedrive:
+                summary: Pipedrive Person/Deal
+                description: Pipedrive person with organization (snake_case, array fields)
+                value:
+                  id: 9876
+                  person_id: 5432
+                  first_name: "Sarah"
+                  last_name: "Johnson"
+                  email:
+                    - value: "sarah@bigenterprise.com"
+                      primary: true
+                  phone:
+                    - value: "+1-555-0123"
+                      primary: true
+                  title: "Director of Operations"
+                  org_name: "Big Enterprise Inc"
+                  value: 75000
+              universal:
+                summary: Universal/Raw API
+                description: Direct universal schema fields (snake_case)
+                value:
+                  company_domain: "innovate.co"
+                  company_name: "Innovate Co"
+                  company_industry: "Fintech"
+                  company_employee_band: "51-200"
+                  company_revenue_band: "10-50M"
+                  company_region: "UK"
+                  contact_email: "alex@innovate.co"
+                  contact_first_name: "Alex"
+                  contact_last_name: "Chen"
+                  contact_role_function: "RevOps"
+                  contact_role_seniority: "Director"
+                  contact_title_raw: "Director of Revenue Operations"
+                  primary_use_case: "Lead scoring automation"
+                  estimated_deal_band: "Mid"
+                  urgency_band: "ThisQuarter"
+                  lead_source: "Partner referral"
       responses:
         '200':
-          description: Enriched and scored lead
+          description: Successfully enriched and scored lead
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnrichLeadResponse'
+              example:
+                lead_id: "550e8400-e29b-41d4-a716-446655440000"
+                scoring_run_id: "660f9511-f30c-52e5-b827-557766551111"
+                enriched:
+                  company_domain: "acme.com"
+                  company_name: "Acme Corp"
+                  company_industry: "Technology"
+                  company_employee_band: "201-1000"
+                  company_revenue_band: "50-250M"
+                  company_region: "California, United States"
+                  contact_email: "jane.smith@acme.com"
+                  contact_first_name: "Jane"
+                  contact_last_name: "Smith"
+                  contact_role_seniority: "VP"
+                  contact_title_raw: "VP of Sales"
+                  lead_source: "Demo Request"
+                lead_score: 85
+                lead_tier: "Hot"
+                scoring_version: "v1"
+                score_breakdown:
+                  email_domain: 15
+                  company_size: 20
+                  revenue: 20
+                  seniority: 20
+                  industry: 15
+                  lead_source: 15
+                reasons:
+                  - "Corporate email: acme.com (+15)"
+                  - "Company size: 201-1000 employees (+20)"
+                  - "Revenue: 50-250M (+20)"
+                  - "Seniority: VP (+20)"
+                  - "High-value industry: Technology (+15)"
+                  - "Lead source: Demo Request (+15)"
+                enrichment_sources:
+                  - "stub"
+                enrichment_duration_ms: 52
         '400':
-          description: Validation error
+          description: Validation error (missing required fields)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Missing required field: company_domain (or Company/Email for auto-detection)"
+        '401':
+          description: Authentication error (invalid or missing API key)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid API key"
+        '403':
+          description: Tenant account inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Tenant account is inactive"
         '500':
           description: Server error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
   /health:
     get:
-      summary: Health check endpoint
+      tags:
+        - Health
+      summary: Health check
+      description: Returns service health status
       operationId: healthCheck
       responses:
         '200':
@@ -53,12 +240,48 @@ paths:
                   timestamp:
                     type: string
                     format: date-time
+
 components:
+  securitySchemes:
+    ApiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Tenant API key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Tenant API key as Bearer token
+
   schemas:
+    # ==========================================================================
+    # REQUEST SCHEMAS
+    # ==========================================================================
+    
     EnrichLeadRequest:
       type: object
-      description: Salesforce Lead object fields
+      description: |
+        Accepts any CRM format or universal schema fields.
+        The API auto-detects the source and maps to universal schema.
+        
+        **Salesforce**: Use PascalCase (`FirstName`, `Company`, `NumberOfEmployees`)  
+        **HubSpot**: Use lowercase (`firstname`, `company`, `numberofemployees`)  
+        **Pipedrive**: Use snake_case with arrays (`first_name`, `org_name`, `email[]`)  
+        **Universal/API**: Use snake_case universal fields directly
+      oneOf:
+        - $ref: '#/components/schemas/SalesforceLeadInput'
+        - $ref: '#/components/schemas/HubSpotContactInput'
+        - $ref: '#/components/schemas/PipedrivePersonInput'
+        - $ref: '#/components/schemas/UniversalLeadInput'
+    
+    SalesforceLeadInput:
+      type: object
+      description: Salesforce Lead object fields (PascalCase)
       properties:
+        Id:
+          type: string
+          description: Salesforce Lead ID (18 characters)
+          example: "00Q5e000001abc123"
         FirstName:
           type: string
           description: Lead's first name
@@ -86,49 +309,455 @@ components:
           description: Number of employees at the company
         AnnualRevenue:
           type: number
-          description: Company annual revenue
+          description: Company annual revenue in USD
         LeadSource:
           type: string
           description: How the lead was acquired
+        Website:
+          type: string
+          description: Company website URL
+        Country:
+          type: string
+          description: Country
+        State:
+          type: string
+          description: State/Province
+        City:
+          type: string
+          description: City
       required:
-        - LastName
         - Company
+    
+    HubSpotContactInput:
+      type: object
+      description: HubSpot Contact properties (lowercase)
+      properties:
+        vid:
+          type: integer
+          description: HubSpot contact ID
+        firstname:
+          type: string
+        lastname:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        jobtitle:
+          type: string
+        company:
+          type: string
+        industry:
+          type: string
+        numberofemployees:
+          type: string
+          description: Employee count (string in HubSpot)
+        annualrevenue:
+          type: string
+          description: Annual revenue (string in HubSpot)
+        lifecyclestage:
+          type: string
+          description: HubSpot lifecycle stage
+        hs_lead_status:
+          type: string
+          description: HubSpot lead status
+        country:
+          type: string
+        state:
+          type: string
+        website:
+          type: string
+    
+    PipedrivePersonInput:
+      type: object
+      description: Pipedrive Person/Deal fields (snake_case with arrays)
+      properties:
+        id:
+          type: integer
+          description: Pipedrive deal ID
+        person_id:
+          type: integer
+          description: Pipedrive person ID
+        first_name:
+          type: string
+        last_name:
+          type: string
+        name:
+          type: string
+          description: Full name (if first/last not provided)
+        email:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                properties:
+                  value:
+                    type: string
+                  primary:
+                    type: boolean
+        phone:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                properties:
+                  value:
+                    type: string
+                  primary:
+                    type: boolean
+        title:
+          type: string
+        org_name:
+          type: string
+          description: Organization name
+        org_id:
+          oneOf:
+            - type: integer
+            - type: object
+              properties:
+                value:
+                  type: integer
+                name:
+                  type: string
+        value:
+          type: number
+          description: Deal value
+        currency:
+          type: string
+    
+    UniversalLeadInput:
+      type: object
+      description: |
+        Universal schema for direct API integration.
+        All fields use snake_case naming convention.
+      properties:
+        # --- Company-level ---
+        company_domain:
+          type: string
+          description: Company domain (e.g., "acme.com"). **Required** - extracted from email if not provided.
+          example: "acme.com"
+        company_name:
+          type: string
+          description: Company display name
+          example: "Acme Corporation"
+        company_industry:
+          type: string
+          description: Normalized industry name
+          example: "Technology"
+        company_employee_band:
+          type: string
+          enum: ["1-10", "11-50", "51-200", "201-1000", "1000+"]
+          description: Employee count band
+          example: "201-1000"
+        company_revenue_band:
+          type: string
+          enum: ["<1M", "1-10M", "10-50M", "50-250M", "250M+"]
+          description: Annual revenue band
+          example: "10-50M"
+        company_region:
+          type: string
+          description: Region or country code
+          example: "US"
+        company_tech_stack_summary:
+          type: object
+          description: Key technologies used (JSON object)
+          example:
+            crm: "salesforce"
+            marketing: "hubspot"
+            analytics: "mixpanel"
+        
+        # --- Person-level ---
+        contact_email:
+          type: string
+          format: email
+          description: Contact's email address
+          example: "jane@acme.com"
+        contact_first_name:
+          type: string
+          description: Contact's first name
+          example: "Jane"
+        contact_last_name:
+          type: string
+          description: Contact's last name
+          example: "Smith"
+        contact_role_function:
+          type: string
+          enum: ["Sales", "Marketing", "RevOps", "Ops", "Finance", "IT", "FounderExec", "Legal", "Other"]
+          description: Job function category
+          example: "Sales"
+        contact_role_seniority:
+          type: string
+          enum: ["IC", "Manager", "Director", "VP", "C-Level"]
+          description: Seniority level
+          example: "VP"
+        contact_title_raw:
+          type: string
+          description: Raw job title string
+          example: "VP of Sales"
+        contact_geo:
+          type: string
+          description: Contact's geographic location
+          example: "San Francisco, CA"
+        contact_phone:
+          type: string
+          description: Contact's phone number
+          example: "+1-555-0123"
+        
+        # --- Need / Fit ---
+        primary_use_case:
+          type: string
+          description: Primary intended use case
+          example: "Lead scoring automation"
+        estimated_deal_band:
+          type: string
+          enum: ["Small", "Mid", "Enterprise"]
+          description: Estimated deal size tier
+          example: "Mid"
+        urgency_band:
+          type: string
+          enum: ["Exploring", "ThisQuarter", "ThisMonth"]
+          description: Purchase urgency/timeline
+          example: "ThisQuarter"
+        lead_source:
+          type: string
+          description: How the lead was acquired
+          example: "Demo Request"
+        
+        # --- Metadata ---
+        external_id:
+          type: string
+          description: External system record ID (for upsert matching)
+          example: "lead_123456"
+        _source:
+          type: string
+          enum: ["salesforce", "hubspot", "pipedrive", "api"]
+          description: Hint for source CRM (optional)
+      required:
+        - company_domain
+    
+    # ==========================================================================
+    # RESPONSE SCHEMAS
+    # ==========================================================================
+    
     EnrichLeadResponse:
       type: object
+      description: |
+        Enriched and scored lead response with dual scoring.
+        Includes both raw (pre-enrichment) and enriched (post-enrichment) scores.
       properties:
-        score:
-          type: integer
-          description: Lead score (0-100+)
-          example: 65
-        tier:
+        lead_id:
           type: string
-          enum: [low, medium, high]
-          description: Lead tier based on score
-          example: medium
+          format: uuid
+          description: Unique lead record ID
+        scoring_run_id:
+          type: string
+          format: uuid
+          description: Unique scoring run ID (for audit)
+        enriched:
+          $ref: '#/components/schemas/UniversalLeadInput'
+        
+        # Full scoring result object
+        scoring:
+          $ref: '#/components/schemas/ScoringResult'
+        
+        # Backward-compatible top-level fields (= enriched values)
+        lead_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Lead score (0-100). Equals enriched_score for backward compatibility.
+          example: 75
+          deprecated: true
+        lead_tier:
+          type: string
+          enum: ["Hot", "Warm", "Cold"]
+          description: Lead tier. Equals enriched_tier for backward compatibility.
+          example: "Hot"
+          deprecated: true
+        scoring_version:
+          type: string
+          description: Scoring model version used
+          example: "v1"
+        score_breakdown:
+          type: object
+          description: Points contributed by each scoring factor (enriched)
+          additionalProperties:
+            type: integer
+          example:
+            email_domain: 15
+            company_size: 20
+            seniority: 20
+            industry: 15
+            lead_source: 15
         reasons:
           type: array
           items:
             type: string
-          description: Array of scoring reasons
-          example: ["Corporate email domain", "VP or director level", "High-value industry: Technology"]
-        estimatedArr:
-          type: number
-          description: Estimated annual recurring revenue
-          example: 25000
-        decisionId:
+          description: Human-readable scoring explanations
+          example:
+            - "Corporate email: acme.com (+15)"
+            - "Company size: 201-1000 employees (+20)"
+            - "Seniority: VP (+20)"
+        
+        # Dual scoring shorthand fields (for CRM field mapping)
+        raw_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: |
+            Raw lead score (0-100) computed from original CRM data only, before enrichment.
+            Maps to Salesforce field: Raw_Lead_Score__c
+          example: 45
+        raw_tier:
           type: string
-          format: uuid
-          description: Unique identifier for this scoring decision
-          example: "550e8400-e29b-41d4-a716-446655440000"
+          enum: ["Hot", "Warm", "Cold"]
+          description: Lead tier based on raw_score
+          example: "Warm"
+        enriched_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: |
+            Enriched lead score (0-100) computed after enrichment with all available signals.
+            Maps to Salesforce field: Enriched_Lead_Score__c
+          example: 75
+        enriched_tier:
+          type: string
+          enum: ["Hot", "Warm", "Cold"]
+          description: Lead tier based on enriched_score
+          example: "Hot"
+        lift:
+          type: integer
+          description: |
+            Score improvement from enrichment (enriched_score - raw_score).
+            Positive = enrichment improved score. Negative = enrichment revealed disqualifying signals.
+          example: 30
+        dimensions:
+          $ref: '#/components/schemas/DimensionBreakdown'
+        
+        # Meta
+        enrichment_sources:
+          type: array
+          items:
+            type: string
+          description: Data providers used for enrichment
+          example: ["clearbit", "apollo"]
+        enrichment_duration_ms:
+          type: integer
+          description: Total processing time in milliseconds
+          example: 150
       required:
-        - score
-        - tier
-        - reasons
-        - estimatedArr
-        - decisionId
+        - lead_id
+        - scoring_run_id
+        - enriched
+        - scoring
+        - raw_score
+        - raw_tier
+        - enriched_score
+        - enriched_tier
+        - lift
+        - dimensions
+        - enrichment_sources
+        - enrichment_duration_ms
+    
+    ScoringResult:
+      type: object
+      description: Complete scoring result with dual scores and dimensions
+      properties:
+        score:
+          type: integer
+          description: Lead score (= enriched_score for backward compatibility)
+          example: 75
+        tier:
+          type: string
+          enum: ["Hot", "Warm", "Cold"]
+          description: Lead tier (= enriched_tier for backward compatibility)
+          example: "Hot"
+        raw_score:
+          type: integer
+          description: Score from original CRM data only (pre-enrichment)
+          example: 45
+        raw_tier:
+          type: string
+          enum: ["Hot", "Warm", "Cold"]
+          description: Tier based on raw_score
+          example: "Warm"
+        enriched_score:
+          type: integer
+          description: Score after enrichment with all signals
+          example: 75
+        enriched_tier:
+          type: string
+          enum: ["Hot", "Warm", "Cold"]
+          description: Tier based on enriched_score
+          example: "Hot"
+        lift:
+          type: integer
+          description: enriched_score - raw_score
+          example: 30
+        scoring_version:
+          type: string
+          description: Scoring model version
+          example: "v1"
+        score_breakdown:
+          type: object
+          description: Enriched score breakdown by signal
+          additionalProperties:
+            type: integer
+        raw_breakdown:
+          type: object
+          description: Raw score breakdown by signal
+          additionalProperties:
+            type: integer
+        dimensions:
+          $ref: '#/components/schemas/DimensionBreakdown'
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Human-readable explanations
+    
+    DimensionBreakdown:
+      type: object
+      description: |
+        Dimension-level scores (0-100 each) grouping signals into categories.
+        Useful for understanding lead quality at a glance.
+      properties:
+        fit:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: |
+            ICP/firmographic fit score. Based on: company size, industry, seniority, region, email domain.
+          example: 72
+        intent:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: |
+            Intent/interest score. Based on: lead source, use case, deal size.
+          example: 85
+        timing:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: |
+            Timing/urgency score. Based on: urgency band, recency signals.
+          example: 50
+    
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
           description: Error message
+          example: "Missing required field: company_domain"
+      required:
+        - error
+
+security:
+  - ApiKeyHeader: []
+  - BearerAuth: []
